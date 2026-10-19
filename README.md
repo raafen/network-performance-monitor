@@ -2,6 +2,10 @@
 
 A Python CLI for real ICMP latency and packet-loss monitoring, with a live Rich dashboard and append-only CSV / JSON Lines logs. Each measurement comes from the operating system's `ping` utility; there are no simulated samples or overlapping probes.
 
+![Network Performance Monitor dashboard with real loopback latency measurements](assets/dashboard.svg)
+
+Dashboard capture from 40 real ICMP probes to `127.0.0.1`. This static image shows measured results; the running application also animates probes.
+
 ## Features
 
 - Animated in-flight spinner, elapsed-time header, and connection status.
