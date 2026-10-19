@@ -1,0 +1,32 @@
+# Python and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Generated measurements and temporary files
+logs/
+*.log
+*.csv
+*.jsonl
+*.ndjson
+*.tmp
+*.swp
+.DS_Store
+
+# Local credentials and editor state
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+.vscode/
+.idea/
