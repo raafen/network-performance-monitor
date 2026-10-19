@@ -111,7 +111,7 @@ The process deadline allows the effective OS reply timeout **plus one second** f
 - **Permission denied / operation not permitted:** check container capabilities or your administrator's ICMP policy. This program does not elevate privileges.
 - **100% loss:** ICMP may be blocked or rate-limited. Ping measures ICMP reachability, not HTTP availability, throughput, bandwidth, or application health.
 - **DNS failure:** check the target and local resolver. An invalid hostname is an error, never counted as packet loss.
-- **No animation:** redirected/non-terminal output and `--no-animation` intentionally use plain records. Interactive terminals must support Rich's cursor control. Narrow terminals use a compact layout; extremely small widths necessarily truncate labels. Use UTF-8 for the sparkline and spinner glyphs.
+- **No animation:** redirected/non-terminal output and `--no-animation` intentionally use plain records. Interactive terminals must support Rich's cursor control. Narrow terminals use a compact layout; extremely small widths necessarily truncate labels. UTF-8 enables the full sparkline and spinner glyphs. Legacy output encodings use ASCII chart/spinner glyphs and `<=` / `>=` bounds; unsupported characters in target names or diagnostics are escaped without changing logged measurements.
 - **Log path failure:** create its parent directory and verify write permissions. Do not reuse a CSV file with a different schema.
 
 ## Development and verification

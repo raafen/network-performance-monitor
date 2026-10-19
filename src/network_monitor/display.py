@@ -6,6 +6,7 @@ import math
 import time
 from datetime import timezone
 
+from rich import box
 from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
 from rich.panel import Panel
@@ -47,8 +48,21 @@ class MonitorDisplay:
         self.animated = animated
         self.started = time.monotonic()
         self.probing = False
-        self.spinner = Spinner("dots", style="cyan")
+        try:
+            "≤≥▁⠋".encode(console.encoding)
+            self.unicode = True
+        except UnicodeEncodeError:
+            self.unicode = False
+        self.spinner = Spinner("dots" if self.unicode else "line", style="cyan")
         self.live: Live | None = None
+
+    def _safe(self, value: str) -> str:
+        """Keep bounds meaningful and escape external text on legacy streams."""
+        if not self.unicode:
+            value = value.translate(str.maketrans({
+                "≤": "<=", "≥": ">=", "—": "-", "–": "-", "·": "|",
+            }))
+        return value.encode(self.console.encoding, errors="backslashreplace").decode(self.console.encoding)
 
     def __enter__(self) -> MonitorDisplay:
         if self.animated:
@@ -87,7 +101,7 @@ class MonitorDisplay:
             "error": "execution error",
         }[result.status]
         detail = f" — {_message(result.error)}" if result.error else ""
-        self.console.print(Text(f"{timestamp} {result.host}  {status}{detail}"))
+        self.console.print(Text(self._safe(f"{timestamp} {result.host}  {status}{detail}")))
 
     def latency_style(self, value: float | None) -> str:
         if value is None:
@@ -107,36 +121,36 @@ class MonitorDisplay:
         if latest.status == "error":
             return Text("Execution error", style="red")
         return Text(
-            latency_text(latest.latency_ms, latest.latency_is_upper_bound),
+            self._safe(latency_text(latest.latency_ms, latest.latency_is_upper_bound)),
             style=self.latency_style(latest.latency_ms),
         )
 
     def _aggregate(self, value: float | None) -> str:
         if value is None:
-            return "—"
+            return self._safe("—")
         # An upper-bound sample makes an exact aggregate claim unjustified.
         prefix = "≤" if self.statistics.has_upper_bounds else ""
-        return f"{prefix}{value:g} ms"
+        return self._safe(f"{prefix}{value:g} ms")
 
     def _loss(self) -> str:
         value = self.statistics.loss_percent
-        return "—" if value is None else f"{value:.1f}%"
+        return self._safe("—") if value is None else f"{value:.1f}%"
 
     def _metrics(self, width: int) -> Table:
         stats = self.statistics
         if width >= 92:
-            table = Table(expand=True, show_edge=False, pad_edge=False)
+            table = Table(expand=True, show_edge=False, pad_edge=False, box=box.ROUNDED if self.unicode else box.ASCII)
             for name in ("Host", "Latest", "Average", "Loss", "Probes", "Replies", "Timeouts", "Errors"):
                 table.add_column(name)
             table.add_row(
-                Text(stats.host), self._latest(), self._aggregate(stats.average_ms), self._loss(),
+                Text(self._safe(stats.host)), self._latest(), self._aggregate(stats.average_ms), self._loss(),
                 str(stats.probes), str(stats.replies), str(stats.timeouts), str(stats.errors),
             )
             return table
         table = Table.grid(expand=True, padding=(0, 1))
         table.add_column(style="dim", no_wrap=True)
         table.add_column(overflow="fold")
-        table.add_row("Host", Text(stats.host))
+        table.add_row("Host", Text(self._safe(stats.host)))
         table.add_row("Latest", self._latest())
         table.add_row("Average", self._aggregate(stats.average_ms))
         table.add_row("Loss", self._loss())
@@ -150,7 +164,7 @@ class MonitorDisplay:
         values = [item.latency_ms for item in history if item.status == "reply" and item.latency_ms is not None]
         peak = max(values, default=0.0)
         scale = peak if peak > 0 else 1.0
-        glyphs = "▁▂▃▄▅▆▇█"
+        glyphs = "▁▂▃▄▅▆▇█" if self.unicode else ".:-=+*#@"
         chart = Text()
         # Wrap rather than dropping samples on narrow terminals: every stored attempt is visible.
         columns = max(1, width - 4)
@@ -165,8 +179,8 @@ class MonitorDisplay:
         if not history:
             chart.append("Waiting for first probe", style="dim")
         scale_label = f"0–{peak:g} ms" if values else "No latency samples"
-        legend = Text(f"{scale_label} · gaps = no reply/error", style="dim")
-        return Group(Panel(chart, title="Last 60 attempts", padding=(0, 1)), legend)
+        legend = Text(self._safe(f"{scale_label} · gaps = no reply/error"), style="dim")
+        return Group(Panel(chart, title="Last 60 attempts", padding=(0, 1), box=box.ROUNDED if self.unicode else box.ASCII), legend)
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         elapsed = max(0, int(time.monotonic() - self.started))
@@ -178,17 +192,17 @@ class MonitorDisplay:
         }[self.statistics.latest.status]
         duration = f"{hours:02}:{minutes:02}:{seconds:02}"
         if self.probing:
-            header.add_row(self.spinner, Text(f"Probing · {state} · {duration}", style="bold"))
+            header.add_row(self.spinner, Text(self._safe(f"Probing · {state} · {duration}"), style="bold"))
         else:
-            header.add_row(Text(f"{state} · {duration}", style="bold"))
+            header.add_row(Text(self._safe(f"{state} · {duration}"), style="bold"))
         yield header
         yield self._metrics(options.max_width)
         latest = self.statistics.latest
         if latest is not None and latest.error:
-            yield Text(_message(latest.error), style="red" if latest.status == "error" else "yellow")
+            yield Text(self._safe(_message(latest.error)), style="red" if latest.status == "error" else "yellow")
         yield self._chart(options.max_width)
         yield Text(
-            f"Green <{self.warning_ms:g} · yellow <{self.critical_ms:g} · red ≥{self.critical_ms:g} ms",
+            self._safe(f"Green <{self.warning_ms:g} · yellow <{self.critical_ms:g} · red ≥{self.critical_ms:g} ms"),
             style="dim",
         )
         yield Text(
@@ -196,7 +210,7 @@ class MonitorDisplay:
             f"{self._aggregate(self.statistics.average_ms)} / {self._aggregate(self.statistics.maximum_ms)}"
         )
         if self.statistics.has_upper_bounds:
-            yield Text("≤ aggregates include upper-bound replies", style="dim")
+            yield Text(self._safe("≤ aggregates include upper-bound replies"), style="dim")
 
     def summary(self, *, interrupted: bool = False) -> None:
         stats = self.statistics
@@ -211,4 +225,4 @@ class MonitorDisplay:
         ]
         if stats.has_upper_bounds:
             lines.append("≤ aggregates include upper-bound replies")
-        self.console.print(Text("\n".join(lines)))
+        self.console.print(Text(self._safe("\n".join(lines))))
